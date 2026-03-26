@@ -370,7 +370,7 @@ for eps in [0.05, 0.1, 0.2, 0.3]:
     print(f"CIFAR PGD Targeted:   {cifar_pgd_tar:.2f}")
 
 # =========================
-# 11. 이미지 저장
+# 13. 이미지 저장
 # =========================
 
 def save_images(model, loader, dataset_name):
