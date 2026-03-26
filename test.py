@@ -56,3 +56,88 @@ cifar_test_loader = torch.utils.data.DataLoader(
 )
 
 print("CIFAR-10 데이터 로드 완료!")
+
+# =========================
+# 4. MNIST 모델
+# =========================
+class SimpleCNN(nn.Module):
+    def __init__(self):
+        super(SimpleCNN, self).__init__()
+
+        self.conv1 = nn.Conv2d(1, 32, kernel_size=3)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=3)
+        self.pool = nn.MaxPool2d(2, 2)
+
+        self.fc1 = nn.Linear(64 * 5 * 5, 128)
+        self.fc2 = nn.Linear(128, 10)
+
+        self.relu = nn.ReLU()
+
+    def forward(self, x):
+        x = self.pool(self.relu(self.conv1(x)))
+        x = self.pool(self.relu(self.conv2(x)))
+
+        x = x.view(-1, 64 * 5 * 5)
+
+        x = self.relu(self.fc1(x))
+        x = self.fc2(x)
+
+        return x
+
+# =========================
+# 5. 모델 생성
+# =========================
+mnist_model = SimpleCNN().to(device)
+
+# =========================
+# 6. 학습 함수 (재사용용)
+# =========================
+def train_model(model, loader, epochs=7):
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=0.0001)
+
+    for epoch in range(epochs):
+        model.train()
+        running_loss = 0.0
+
+        for images, labels in loader:
+            images, labels = images.to(device), labels.to(device)
+
+            optimizer.zero_grad()
+            outputs = model(images)
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
+
+            running_loss += loss.item()
+
+        print(f"Epoch {epoch+1}, Loss: {running_loss:.4f}")
+
+# =========================
+# 7. 평가 함수
+# =========================
+def evaluate_model(model, loader):
+    model.eval()
+    correct = 0
+    total = 0
+
+    with torch.no_grad():
+        for images, labels in loader:
+            images, labels = images.to(device), labels.to(device)
+
+            outputs = model(images)
+            _, predicted = torch.max(outputs, 1)
+
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+
+    return 100 * correct / total
+
+# =========================
+# 8. MNIST 학습
+# =========================
+print("\n===== MNIST 학습 시작 =====")
+train_model(mnist_model, mnist_train_loader, epochs=3)
+
+mnist_acc = evaluate_model(mnist_model, mnist_test_loader)
+print(f"MNIST 정확도: {mnist_acc:.2f}%")
