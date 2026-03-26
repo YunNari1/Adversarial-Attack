@@ -26,6 +26,7 @@ This project runs on CPU by default.
 If you want to use GPU, install PyTorch with CUDA (Python 3.10 or 3.11 recommended):
 
 pip uninstall torch torchvision torchaudio -y
+
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 
 
