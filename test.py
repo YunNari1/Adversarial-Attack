@@ -245,3 +245,123 @@ for eps in [0.05, 0.1, 0.2, 0.3]:
     print(f"MNIST Targeted:   {mnist_tar:.2f}")
     print(f"CIFAR Untargeted: {cifar_unt:.2f}")
     print(f"CIFAR Targeted:   {cifar_tar:.2f}")
+
+
+# =========================
+# 12. PGD 구현 
+# =========================
+
+def pgd_untargeted(model, x, y, k, eps, eps_step):
+    x_orig = x.clone().detach()
+    x_adv = x.clone().detach()
+
+    for _ in range(k):
+        x_adv.requires_grad_(True)
+
+        output = model(x_adv)
+        loss = F.cross_entropy(output, y)
+
+        model.zero_grad()
+        loss.backward()
+
+        grad = x_adv.grad.sign()
+
+        # untargeted: loss를 키우는 방향
+        x_adv = x_adv + eps_step * grad
+
+        # 원본 이미지 기준 eps 범위 안으로 projection
+        x_adv = torch.max(torch.min(x_adv, x_orig + eps), x_orig - eps)
+
+        # 이미지 값 범위 제한
+        x_adv = torch.clamp(x_adv, 0, 1).detach()
+
+    return x_adv
+
+
+def pgd_targeted(model, x, target, k, eps, eps_step):
+    x_orig = x.clone().detach()
+    x_adv = x.clone().detach()
+
+    for _ in range(k):
+        x_adv.requires_grad_(True)
+
+        output = model(x_adv)
+        loss = F.cross_entropy(output, target)
+
+        model.zero_grad()
+        loss.backward()
+
+        grad = x_adv.grad.sign()
+
+        # targeted: target loss를 줄이는 방향
+        x_adv = x_adv - eps_step * grad
+
+        # 원본 이미지 기준 eps 범위 안으로 projection
+        x_adv = torch.max(torch.min(x_adv, x_orig + eps), x_orig - eps)
+
+        # 이미지 값 범위 제한
+        x_adv = torch.clamp(x_adv, 0, 1).detach()
+
+    return x_adv
+
+def pgd_attack_success_rate(model, loader, eps, eps_step, k,
+                            attack_type="untargeted", max_samples=100):
+    model.eval()
+    success = 0
+    total = 0
+
+    for x, y in loader:
+        x, y = x.to(device), y.to(device)
+
+        for i in range(x.size(0)):
+            xi = x[i:i+1]
+            yi = y[i:i+1]
+
+            if attack_type == "untargeted":
+                x_adv = pgd_untargeted(model, xi, yi, k, eps, eps_step)
+                pred = model(x_adv).argmax(1)
+
+                if pred.item() != yi.item():
+                    success += 1
+
+            elif attack_type == "targeted":
+                num_classes = model(xi).shape[1]
+                target = torch.tensor([(yi.item() + 1) % num_classes]).to(device)
+
+                x_adv = pgd_targeted(model, xi, target, k, eps, eps_step)
+                pred = model(x_adv).argmax(1)
+
+                if pred.item() == target.item():
+                    success += 1
+
+            total += 1
+            if total >= max_samples:
+                return success / total
+
+    return success / total
+
+print("\n===== PGD 공격 결과 =====")
+
+k = 40
+eps_step = 0.01
+
+for eps in [0.05, 0.1, 0.2, 0.3]:
+    mnist_pgd_unt = pgd_attack_success_rate(
+        mnist_model, mnist_test_loader, eps, eps_step, k, "untargeted"
+    )
+    mnist_pgd_tar = pgd_attack_success_rate(
+        mnist_model, mnist_test_loader, eps, eps_step, k, "targeted"
+    )
+
+    cifar_pgd_unt = pgd_attack_success_rate(
+        cifar_model, cifar_test_loader, eps, eps_step, k, "untargeted"
+    )
+    cifar_pgd_tar = pgd_attack_success_rate(
+        cifar_model, cifar_test_loader, eps, eps_step, k, "targeted"
+    )
+
+    print(f"\n[eps={eps}]")
+    print(f"MNIST PGD Untargeted: {mnist_pgd_unt:.2f}")
+    print(f"MNIST PGD Targeted:   {mnist_pgd_tar:.2f}")
+    print(f"CIFAR PGD Untargeted: {cifar_pgd_unt:.2f}")
+    print(f"CIFAR PGD Targeted:   {cifar_pgd_tar:.2f}")
