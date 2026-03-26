@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torchvision
 import torchvision.transforms as transforms
-
+from torchvision.models import resnet18, ResNet18_Weights
 # =========================
 # 1. 디바이스 설정
 # =========================
@@ -85,12 +85,23 @@ class SimpleCNN(nn.Module):
         return x
 
 # =========================
-# 5. 모델 생성
+# 5. CIFAR 모델
 # =========================
-mnist_model = SimpleCNN().to(device)
+def get_cifar_model():
+    model = resnet18(weights=ResNet18_Weights.DEFAULT)
+
+    # 마지막 layer 수정 (10 클래스)
+    model.fc = nn.Linear(model.fc.in_features, 10)
+
+    return model
 
 # =========================
-# 6. 학습 함수 (재사용용)
+# 6. 모델 생성
+# =========================
+mnist_model = SimpleCNN().to(device)
+cifar_model = get_cifar_model().to(device)
+# =========================
+# 7. 학습 함수 (재사용용)
 # =========================
 def train_model(model, loader, epochs=7):
     criterion = nn.CrossEntropyLoss()
@@ -114,7 +125,7 @@ def train_model(model, loader, epochs=7):
         print(f"Epoch {epoch+1}, Loss: {running_loss:.4f}")
 
 # =========================
-# 7. 평가 함수
+# 8. 평가 함수
 # =========================
 def evaluate_model(model, loader):
     model.eval()
@@ -134,10 +145,20 @@ def evaluate_model(model, loader):
     return 100 * correct / total
 
 # =========================
-# 8. MNIST 학습
+# 9. MNIST 학습
 # =========================
 print("\n===== MNIST 학습 시작 =====")
 train_model(mnist_model, mnist_train_loader, epochs=3)
 
 mnist_acc = evaluate_model(mnist_model, mnist_test_loader)
 print(f"MNIST 정확도: {mnist_acc:.2f}%")
+
+# =========================
+# 10. CIFAR 학습
+# =========================
+print("\n===== CIFAR-10 학습 시작 =====")
+
+train_model(cifar_model, cifar_train_loader, epochs=5)
+
+cifar_acc = evaluate_model(cifar_model, cifar_test_loader)
+print(f"CIFAR-10 정확도: {cifar_acc:.2f}%")
