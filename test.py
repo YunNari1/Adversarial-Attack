@@ -5,6 +5,9 @@ import torchvision
 import torchvision.transforms as transforms
 from torchvision.models import resnet18, ResNet18_Weights
 import torch.nn.functional as F
+import matplotlib.pyplot as plt
+import os
+
 # =========================
 # 1. 디바이스 설정
 # =========================
@@ -365,3 +368,81 @@ for eps in [0.05, 0.1, 0.2, 0.3]:
     print(f"MNIST PGD Targeted:   {mnist_pgd_tar:.2f}")
     print(f"CIFAR PGD Untargeted: {cifar_pgd_unt:.2f}")
     print(f"CIFAR PGD Targeted:   {cifar_pgd_tar:.2f}")
+
+# =========================
+# 11. 이미지 저장
+# =========================
+
+def save_images(model, loader, dataset_name):
+    os.makedirs("results", exist_ok=True)
+
+    model.eval()
+
+    x, y = next(iter(loader))
+    x, y = x.to(device), y.to(device)
+
+    for i in range(5):
+        xi = x[i:i+1]
+        yi = y[i:i+1]
+
+        # PGD 공격 적용
+        x_adv = pgd_untargeted(model, xi, yi, k=40, eps=0.3, eps_step=0.01)
+
+        # CPU로 변환
+        orig = xi.squeeze().detach().cpu().numpy()
+        adv = x_adv.squeeze().detach().cpu().numpy()
+        pert = (x_adv - xi).squeeze().detach().cpu().numpy()
+
+        # CIFAR는 normalization 되어 있어서 보기 좋게 복원 필요
+        if orig.ndim == 3:
+            mean = [0.485, 0.456, 0.406]
+            std = [0.229, 0.224, 0.225]
+
+            for c in range(3):
+                orig[c] = orig[c] * std[c] + mean[c]
+                adv[c] = adv[c] * std[c] + mean[c]
+
+            orig = orig.transpose(1, 2, 0)
+            adv = adv.transpose(1, 2, 0)
+            pert = pert.transpose(1, 2, 0)
+
+        plt.figure(figsize=(10,3))
+
+        # 원본
+        plt.subplot(1,3,1)
+        if orig.ndim == 2:
+            plt.imshow(orig, cmap='gray')
+        else:
+            plt.imshow(orig)
+        plt.title("Original")
+        plt.axis("off")
+
+        # 공격 이미지
+        plt.subplot(1,3,2)
+        if adv.ndim == 2:
+            plt.imshow(adv, cmap='gray')
+        else:
+            plt.imshow(adv)
+        plt.title("Adversarial")
+        plt.axis("off")
+
+        # perturbation
+        plt.subplot(1,3,3)
+        if pert.ndim == 2:
+            plt.imshow(pert * 10, cmap='gray')
+        else:
+            plt.imshow(pert * 10)
+        plt.title("Perturbation x10")
+        plt.axis("off")
+
+        # 저장
+        plt.savefig(f"results/{dataset_name}_{i}.png")
+        plt.close()
+
+    print(f"{dataset_name} 이미지 저장 완료!")
+
+
+# 실행
+print("\n===== 이미지 저장 =====")
+save_images(mnist_model, mnist_test_loader, "mnist")
+save_images(cifar_model, cifar_test_loader, "cifar")
