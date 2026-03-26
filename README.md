@@ -17,3 +17,10 @@ I used a pretrained ResNet18 model from PyTorch torchvision.
 
 Reference:
 https://pytorch.org/vision/stable/models/generated/torchvision.models.resnet18.html
+
+
+## GPU (Optional)
+
+If you want to use GPU, install PyTorch with CUDA:
+
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
