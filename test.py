@@ -4,6 +4,7 @@ import torch.optim as optim
 import torchvision
 import torchvision.transforms as transforms
 from torchvision.models import resnet18, ResNet18_Weights
+import torch.nn.functional as F
 # =========================
 # 1. 디바이스 설정
 # =========================
@@ -162,3 +163,85 @@ train_model(cifar_model, cifar_train_loader, epochs=5)
 
 cifar_acc = evaluate_model(cifar_model, cifar_test_loader)
 print(f"CIFAR-10 정확도: {cifar_acc:.2f}%")
+
+# =========================
+# 11. FGSM 구현 
+# =========================
+def fgsm_untargeted(model, x, y, eps):
+    x_adv = x.clone().detach().requires_grad_(True)
+
+    output = model(x_adv)
+    loss = F.cross_entropy(output, y)
+
+    model.zero_grad()
+    loss.backward()
+
+    x_adv = x_adv + eps * x_adv.grad.sign()
+    x_adv = torch.clamp(x_adv, 0, 1)
+
+    return x_adv.detach()
+
+def fgsm_targeted(model, x, target, eps):
+    x_adv = x.clone().detach().requires_grad_(True)
+
+    output = model(x_adv)
+    loss = F.cross_entropy(output, target)
+
+    model.zero_grad()
+    loss.backward()
+
+    x_adv = x_adv - eps * x_adv.grad.sign()
+    x_adv = torch.clamp(x_adv, 0, 1)
+
+    return x_adv.detach()
+
+def fgsm_attack_success_rate(model, loader, eps, attack_type="untargeted", max_samples=100):
+    model.eval()
+    success = 0
+    total = 0
+
+    for x, y in loader:
+        x, y = x.to(device), y.to(device)
+
+        for i in range(x.size(0)):
+            xi = x[i:i+1]
+            yi = y[i:i+1]
+
+            if attack_type == "untargeted":
+                x_adv = fgsm_untargeted(model, xi, yi, eps)
+                pred = model(x_adv).argmax(1)
+                if pred.item() != yi.item():
+                    success += 1
+
+            elif attack_type == "targeted":
+                num_classes = model(xi).shape[1]
+                target = torch.tensor([(yi.item()+1)%num_classes]).to(device)
+
+                x_adv = fgsm_targeted(model, xi, target, eps)
+                pred = model(x_adv).argmax(1)
+
+                if pred.item() == target.item():
+                    success += 1
+
+            total += 1
+            if total >= max_samples:
+                return success / total
+
+    return success / total    
+
+
+print("\n===== FGSM 공격 결과 =====")
+
+for eps in [0.05, 0.1, 0.2, 0.3]:
+
+    mnist_unt = fgsm_attack_success_rate(mnist_model, mnist_test_loader, eps, "untargeted")
+    mnist_tar = fgsm_attack_success_rate(mnist_model, mnist_test_loader, eps, "targeted")
+
+    cifar_unt = fgsm_attack_success_rate(cifar_model, cifar_test_loader, eps, "untargeted")
+    cifar_tar = fgsm_attack_success_rate(cifar_model, cifar_test_loader, eps, "targeted")
+
+    print(f"\n[eps={eps}]")
+    print(f"MNIST Untargeted: {mnist_unt:.2f}")
+    print(f"MNIST Targeted:   {mnist_tar:.2f}")
+    print(f"CIFAR Untargeted: {cifar_unt:.2f}")
+    print(f"CIFAR Targeted:   {cifar_tar:.2f}")
